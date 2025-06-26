@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'dart:async';
+import '../main.dart';
+import 'history_screen.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -10,10 +11,13 @@ class MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<MainScreen> {
   final TextEditingController _controller = TextEditingController();
-  final List<String> _choices = ['勉強', '運動', '休憩'];
-  Timer? _timer;
-  int _remainingSeconds = 0;
-  bool _isRunning = false;
+  final List<String> _choices = ['勉強', '仕事', '運動', '家事'];
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   void _onChoicePressed(String choice) {
     setState(() {
@@ -22,56 +26,47 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   void _startTimer() {
-    setState(() {
-      _remainingSeconds = 15 * 60;
-      _isRunning = true;
-    });
-    _timer?.cancel();
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (_remainingSeconds > 0) {
-        setState(() {
-          _remainingSeconds--;
-        });
-      } else {
-        timer.cancel();
-        setState(() {
-          _isRunning = false;
-        });
-        // TODO: 通知や結果入力処理
-      }
-    });
+    final settings = AppSettingsProvider.of(context);
+    settings.startTimer(_controller.text);
   }
 
-  String _formatTime(int seconds) {
-    final m = (seconds ~/ 60).toString().padLeft(2, '0');
-    final s = (seconds % 60).toString().padLeft(2, '0');
-    return '$m:$s';
+  void _pauseTimer() {
+    final settings = AppSettingsProvider.of(context);
+    settings.pauseTimer();
   }
 
-  @override
-  void dispose() {
-    _timer?.cancel();
-    _controller.dispose();
-    super.dispose();
+  void _resetTimer() {
+    final settings = AppSettingsProvider.of(context);
+    settings.resetTimer();
+  }
+
+  void _completeTimer() {
+    final settings = AppSettingsProvider.of(context);
+    settings.completeTimer();
   }
 
   @override
   Widget build(BuildContext context) {
+    final settings = AppSettingsProvider.of(context);
+    final double screenWidth = MediaQuery.of(context).size.width;
+    final double circleSize = screenWidth * 0.95;
+    double progress = settings.totalSeconds == 0 ? 0 : 1 - settings.remainingSeconds / settings.totalSeconds;
+    final timerText = settings.formatTime(settings.isRunning ? settings.remainingSeconds : settings.timerMinutes * 60);
+    final timerMinutes = settings.timerMinutes;
     return Scaffold(
-      appBar: AppBar(title: const Text('15分タイマー')),
+      appBar: AppBar(title: const Text('15分タイマー'), backgroundColor: settings.themeColor),
       body: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(8.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text('やることを入力'),
             TextField(
               controller: _controller,
               decoration: const InputDecoration(
                 hintText: 'やることを入力してください',
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 8),
             Wrap(
               spacing: 8,
               children: _choices.map((choice) => ElevatedButton(
@@ -79,22 +74,74 @@ class _MainScreenState extends State<MainScreen> {
                 child: Text(choice),
               )).toList(),
             ),
-            const SizedBox(height: 32),
-            if (_isRunning)
-              Column(
-                children: [
-                  const Text('残り時間', style: TextStyle(fontSize: 18)),
-                  Text(
-                    _formatTime(_remainingSeconds),
-                    style: const TextStyle(fontSize: 40, fontWeight: FontWeight.bold),
+            const SizedBox(height: 8),
+            Expanded(
+              child: Center(
+                child: SizedBox(
+                  height: circleSize,
+                  width: circleSize,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      CircularProgressIndicator(
+                        value: settings.isRunning ? progress : 0,
+                        strokeWidth: 36,
+                        backgroundColor: settings.themeColor.withOpacity(0.15),
+                        color: settings.themeColor,
+                      ),
+                      Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            timerText,
+                            style: const TextStyle(fontSize: 80, fontWeight: FontWeight.bold),
+                          ),
+                          Text('$timerMinutes分', style: const TextStyle(fontSize: 32)),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (settings.isRunning) ...[
+                  IconButton(
+                    icon: Icon(settings.isPaused ? Icons.play_arrow : Icons.pause),
+                    iconSize: 56,
+                    onPressed: _pauseTimer,
+                    tooltip: settings.isPaused ? '再開' : '一時停止',
+                  ),
+                  const SizedBox(width: 24),
+                  IconButton(
+                    icon: const Icon(Icons.delete),
+                    iconSize: 56,
+                    onPressed: _resetTimer,
+                    tooltip: 'リセット',
+                  ),
+                  const SizedBox(width: 24),
+                  IconButton(
+                    icon: Icon(Icons.check_circle, color: Colors.grey[710]),
+                    iconSize: 64,
+                    onPressed: _completeTimer,
+                    tooltip: '完了',
+                  ),
+                ] else ...[
+                  ElevatedButton(
+                    onPressed: _startTimer,
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 24),
+                      textStyle: const TextStyle(fontSize: 32),
+                    ),
+                    child: const Text('開始'),
                   ),
                 ],
-              )
-            else
-              ElevatedButton(
-                onPressed: _controller.text.isNotEmpty ? _startTimer : null,
-                child: const Text('開始'),
-              ),
+              ],
+            ),
+            const SizedBox(height: 8),
           ],
         ),
       ),
